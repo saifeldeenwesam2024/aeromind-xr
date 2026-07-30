@@ -39,6 +39,10 @@ export class DustField {
    * @param {Vector3} [options.centre] Volume centre.
    * @param {number|string} [options.color] Mote colour.
    * @param {number} [options.seed] RNG seed.
+   * @param {number} [options.maxSize] Ceiling on point size in pixels. A point
+   *   sprite costs its own area in fill rate, so a handful of large motes near
+   *   the eye is far more expensive than a great many small ones — capping the
+   *   size is worth more on a mobile GPU than reducing the count.
    */
   constructor(options) {
     const {
@@ -48,6 +52,7 @@ export class DustField {
       centre = new Vector3(0, 7, 0),
       color = 0xbcd8f5,
       seed = 0x51f3a2,
+      maxSize = 64,
     } = options;
 
     const random = createRandom(seed);
@@ -84,6 +89,7 @@ export class DustField {
         uOpacity: { value: 0 },
         uSize: { value: size.clone() },
         uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
+        uMaxSize: { value: maxSize },
         /** Extra turbulence, raised when something disturbs the air. */
         uAgitation: { value: 0 },
       },
@@ -94,6 +100,7 @@ export class DustField {
         uniform float uTime;
         uniform vec3  uSize;
         uniform float uPixelRatio;
+        uniform float uMaxSize;
         uniform float uAgitation;
 
         varying float vFade;
@@ -119,7 +126,7 @@ export class DustField {
           vFade = smoothstep(0.35, 1.6, dist) * (1.0 - smoothstep(28.0, 44.0, dist));
 
           gl_Position = projectionMatrix * view;
-          gl_PointSize = aScale * uPixelRatio * (14.0 / max(dist, 0.1));
+          gl_PointSize = min(aScale * uPixelRatio * (14.0 / max(dist, 0.1)), uMaxSize);
         }
       `,
       fragmentShader: /* glsl */ `

@@ -70,13 +70,16 @@ class AeroMindApp {
   async boot() {
     if (!this.canvas) throw new Error('Viewport canvas is missing from the document.');
 
-    this.renderer = new Renderer(this.canvas, { maxPixelRatio: 2, quality: 'high' });
+    this.renderer = new Renderer(this.canvas);
+    /** @type {import('./engine/DeviceProfile.js').QualityBudget} */
+    this.budget = this.renderer.budget;
 
     if (!this.renderer.isWebGL2) {
       // WebGL 1 still renders, but several effects rely on WebGL 2 features.
       // Dropping quality keeps it running rather than failing outright.
       this.renderer.setQuality('low');
     }
+    console.info(`[AeroMind] device tier: ${this.budget.tier}`);
 
     /* ------------------------------------------------------------ assets */
 
@@ -100,6 +103,7 @@ class AeroMindApp {
       audio: this.audio,
       hud: this.hud,
       rig: this.rig,
+      budget: this.budget,
     });
     this.scenes.scene.add(this.rig.rig);
 

@@ -50,6 +50,7 @@ import {
 } from 'three';
 import { PostChain, BloomPresets } from '../effects/Bloom.js';
 import { LensDistortionShader } from '../effects/Glow.js';
+import { detectProfile, resolvePixelRatio } from './DeviceProfile.js';
 import { clamp } from './Utils.js';
 
 /**
@@ -61,11 +62,12 @@ export class Renderer {
   /**
    * @param {HTMLCanvasElement} canvas Target canvas.
    * @param {object} [options] Configuration.
-   * @param {number} [options.maxPixelRatio] Ceiling on device pixel ratio.
-   * @param {string} [options.quality] Initial quality preset name.
+   * @param {import('./DeviceProfile.js').QualityBudget} [options.budget] Quality
+   *   budget; detected from the device when omitted.
    */
   constructor(canvas, options = {}) {
-    const { maxPixelRatio = 2, quality = 'high' } = options;
+    /** @type {import('./DeviceProfile.js').QualityBudget} Active quality budget. */
+    this.budget = options.budget ?? detectProfile();
 
     /** @type {HTMLCanvasElement} */
     this.canvas = canvas;
@@ -73,7 +75,11 @@ export class Renderer {
     /** @type {WebGLRenderer} */
     this.renderer = new WebGLRenderer({
       canvas,
-      antialias: true,
+      // Every pixel the viewer sees is composited from a render target, and the
+      // final pass is a full-screen quad — so a multisampled *canvas* would cost
+      // memory and bandwidth while antialiasing nothing. Scene antialiasing is
+      // handled by the render target's own sample count instead.
+      antialias: false,
       alpha: false,
       stencil: false,
       depth: true,
@@ -84,7 +90,7 @@ export class Renderer {
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.88;
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.enabled = this.budget.shadows;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
     this.renderer.setClearColor(0x000000, 1);
     this.renderer.autoClear = true;
@@ -96,14 +102,12 @@ export class Renderer {
     /** @type {boolean} True when a WebGL2 context was obtained. */
     this.isWebGL2 = this.renderer.capabilities.isWebGL2 !== false;
 
-    /** @type {number} */
-    this.maxPixelRatio = maxPixelRatio;
     /** @type {string} Active quality preset. */
-    this.quality = quality;
+    this.quality = this.budget.bloomPreset;
     /** @type {'flat'|'stereo'|'xr'} */
     this.mode = 'flat';
 
-    /** @type {number} Adaptive resolution multiplier, 0.55–1.0. */
+    /** @type {number} Adaptive resolution multiplier. */
     this.renderScale = 1;
     /** @type {number} Smoothed frame time in milliseconds. */
     this.frameTimeMs = 16.7;
@@ -219,7 +223,11 @@ export class Renderer {
       // Each eye is already half-width, and a viewer's lens magnifies the image
       // enough that fine bloom detail is lost anyway — so the bloom buffer runs
       // proportionally smaller in stereo than it does on a flat screen.
-      const eyePreset = { ...preset, bloomScale: preset.bloomScale * 0.8 };
+      const eyePreset = {
+        ...preset,
+        bloomScale: preset.bloomScale * 0.8 * this.budget.bloomScale,
+        samples: this.budget.msaaSamples,
+      };
 
       if (!this.chainLeft) {
         this.chainLeft = new PostChain(this.renderer, this.scene, this.rig.eyeLeft, {
@@ -240,7 +248,10 @@ export class Renderer {
       this.#disposeChain('chainRight');
       if (!this.chainMono) {
         this.chainMono = new PostChain(this.renderer, this.scene, this.rig.mono, {
-          width: bufferW, height: bufferH, ...preset, renderToScreen: true,
+          width: bufferW, height: bufferH, ...preset,
+          bloomScale: preset.bloomScale * this.budget.bloomScale,
+          samples: this.budget.msaaSamples,
+          renderToScreen: true,
         });
       }
       this.chainMono.setSize(bufferW, bufferH);
@@ -353,10 +364,10 @@ export class Renderer {
     const width = Math.max(1, window.innerWidth);
     const height = Math.max(1, window.innerHeight);
 
-    // Stereo halves the horizontal resolution per eye, so a lower device pixel
-    // ratio keeps the pixel budget sane on high-DPI phones.
-    const cap = this.mode === 'stereo' ? Math.min(this.maxPixelRatio, 1.75) : this.maxPixelRatio;
-    const dpr = Math.min(window.devicePixelRatio || 1, cap);
+    // The budget bounds both the pixel ratio and the absolute pixel count per
+    // eye — the latter is what actually protects a phone, since two handsets can
+    // report the same ratio across very different screen areas.
+    const dpr = resolvePixelRatio(this.budget, width, height, this.mode === 'stereo');
 
     this.size = { width, height, dpr };
     this.renderer.setPixelRatio(dpr);
@@ -462,8 +473,9 @@ export class Renderer {
 
     const before = this.renderScale;
 
-    if (this.frameTimeMs > 21 && this.renderScale > 0.55) {
-      this.renderScale = Math.max(0.55, this.renderScale - 0.1);
+    const floor = this.budget.minRenderScale;
+    if (this.frameTimeMs > 21 && this.renderScale > floor) {
+      this.renderScale = Math.max(floor, this.renderScale - 0.1);
     } else if (this.frameTimeMs < 13.5 && this.renderScale < 1) {
       this.renderScale = Math.min(1, this.renderScale + 0.05);
     }

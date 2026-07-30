@@ -355,8 +355,8 @@ export class HUD {
     this.narrationMaterial = this.#track(this.#createOverlayMaterial(this.narrationTexture, 1.0, true));
 
     /** @type {Mesh} */
-    this.narrationBar = new Mesh(new PlaneGeometry(1.12, 0.176), this.narrationMaterial);
-    this.narrationBar.position.set(0, -0.335, -HUD_DISTANCE);
+    this.narrationBar = new Mesh(new PlaneGeometry(1.24, 0.195), this.narrationMaterial);
+    this.narrationBar.position.set(0, -0.325, -HUD_DISTANCE);
     this.narrationBar.renderOrder = 43;
     this.group.add(this.narrationBar);
 
@@ -420,7 +420,7 @@ export class HUD {
     }
 
     ctx.fillStyle = 'rgba(150,195,235,0.8)';
-    ctx.font = `500 34px ${MONO_FONT}`;
+    ctx.font = `600 38px ${MONO_FONT}`;
     trackedText(ctx, this.status.mode, W / 2, 58, 5, 'center');
 
     ctx.fillStyle = 'rgba(122,217,255,0.75)';
@@ -476,14 +476,14 @@ export class HUD {
     trackedText(ctx, this.narrationSpeaker, W / 2, 39, 4, 'center');
 
     // Body copy, revealed progressively.
-    ctx.font = `400 46px ${UI_FONT}`;
+    ctx.font = `500 58px ${UI_FONT}`;
     const shown = this.narrationText.slice(0, Math.floor(this._narrationChars));
-    const lines = wrapText(ctx, shown, W - 120);
+    const lines = wrapText(ctx, shown, W - 150);
 
     ctx.fillStyle = 'rgba(226,240,252,0.97)';
     ctx.textAlign = 'center';
     lines.slice(-2).forEach((line, i) => {
-      ctx.fillText(line, W / 2, 118 + i * 58);
+      ctx.fillText(line, W / 2, 126 + i * 66);
     });
     ctx.textAlign = 'left';
 

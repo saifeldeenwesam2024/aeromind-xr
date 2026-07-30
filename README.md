@@ -211,6 +211,14 @@ bearings collapse toward the centre of vision and pile up. Centring the arc on
 the eyes means every panel is equidistant — comfortable to fuse in stereo — and
 a panel's bearing is exactly how far the viewer must turn to look at it.
 
+**Text is sized in degrees, not metres.** Panels sit 3.4–4.0 m out and are
+1.5 m wide, so each subtends about 23° and its title lands near 1.6° of visual
+angle. Below roughly 1.5°, text in a viewer is uncomfortable to read however
+crisp the render is — which is why the panels are close and large rather than
+distant and numerous. The forward ±22° stays clear so the engine is never
+masked, and nothing world-space sits below the eye line at close range, because
+the head-locked narration strip already lives there.
+
 ---
 
 ## Performance
@@ -237,17 +245,43 @@ The target is a steady 60 fps, and the budget is spent deliberately:
 Quality presets (`ultra` / `high` / `medium` / `low`) control bloom buffer scale
 and MSAA sample count; the renderer selects one and adapts from there.
 
-Measured on an Apple M1 at 1280 × 720, in the busiest chapter with all eleven
-analysis panels present:
+### Device budgets
+
+`src/engine/DeviceProfile.js` classifies the device once at startup and hands
+every subsystem a budget. The binding constraint on a phone is **fill rate**,
+not geometry — a mobile GPU pushes this scene's triangles easily but chokes on
+large additive transparent layers — so the mobile budget cuts overdraw first:
+
+| | Desktop | Mobile | Mobile-low |
+|---|---:|---:|---:|
+| Pixels per eye (ceiling) | 2.6 M | 1.15 M | 0.75 M |
+| Scene MSAA | 4× | off | off |
+| Ground haze layers | 7 | 3 | 2 |
+| Volumetric shafts | 6 | 3 | 2 |
+| Dust motes / max size | 4200 / 64 px | 1400 / 26 px | 700 / 18 px |
+| Shadows | on, 1024 | on, 512 | off |
+| Panel repaints | 12 Hz | 8 Hz | 6 Hz |
+| Engineers | 3 | 3 | 2 |
+
+Detection is coarse on purpose — a browser cannot identify a GPU, and
+user-agent sniffing for handsets ages badly — so it splits on whether the
+device is handheld plus its reported memory and core count, then lets adaptive
+resolution absorb the rest.
+
+Append `?tier=mobile` or `?tier=mobile-low` to the URL to force a tier. That is
+useful for previewing the mobile look from a desktop, and for pinning a
+struggling handset at a venue without rebuilding anything.
+
+Measured in the busiest chapter, with all eleven analysis panels present:
 
 | Mode | Draw calls | Triangles |
 |------|-----------:|----------:|
-| Flat | 189 | 108 k |
-| Stereo (both eyes + composite) | 330 | 203 k |
+| Flat (mobile budget) | 162 | 84 k |
+| Stereo, both eyes + composite (mobile budget) | 322 | 168 k |
+| Stereo, both eyes + composite (desktop budget) | 420 | 226 k |
 
-Stereo is well under twice the cost of flat: the shadow pass is shared, the
-composite is two quads, and each eye's ping-pong buffer runs without
-multisampling since only the render pass draws geometry.
+Stereo costs well under twice a flat frame: the shadow pass is shared between
+eyes and the composite is two quads.
 
 ---
 

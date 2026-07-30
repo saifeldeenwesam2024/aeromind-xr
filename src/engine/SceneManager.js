@@ -22,6 +22,8 @@
 
 import { Mesh, PlaneGeometry, Scene, Vector3 } from 'three';
 
+import { detectProfile } from './DeviceProfile.js';
+
 import { AircraftEngine, BLADE_COUNT, FAULT_BLADE } from '../objects/AircraftEngine.js';
 import { CREW_UNIFORMS, Engineer, disposeEngineerGeometry } from '../objects/Engineer.js';
 import { DigitalTwin } from '../objects/DigitalTwin.js';
@@ -65,8 +67,10 @@ export class SceneManager {
    * @param {import('./AudioEngine.js').AudioEngine} context.audio Audio director.
    * @param {import('../ui/HUD.js').HUD} context.hud Glasses interface.
    * @param {import('./CameraRig.js').CameraRig} context.rig Camera rig.
+   * @param {import('./DeviceProfile.js').QualityBudget} [context.budget] Quality
+   *   budget governing particle counts, overdraw layers and panel fidelity.
    */
-  constructor({ assets, audio, hud, rig }) {
+  constructor({ assets, audio, hud, rig, budget }) {
     /** @type {import('./AssetManager.js').AssetManager} */
     this.assets = assets;
     /** @type {import('./AudioEngine.js').AudioEngine} */
@@ -75,6 +79,8 @@ export class SceneManager {
     this.hud = hud;
     /** @type {import('./CameraRig.js').CameraRig} */
     this.rig = rig;
+    /** @type {import('./DeviceProfile.js').QualityBudget} */
+    this.budget = budget ?? detectProfile();
 
     /** @type {Scene} */
     this.scene = new Scene();
@@ -137,19 +143,26 @@ export class SceneManager {
     this.scene.add(this.hangar.group);
 
     /** @type {LightRig} */
-    this.lights = new LightRig({ focus: ENGINE_CENTRE, shaftCount: 6 });
+    this.lights = new LightRig({
+      focus: ENGINE_CENTRE,
+      shaftCount: this.budget.shaftCount,
+      shadows: this.budget.shadows,
+      shadowMapSize: this.budget.shadowMapSize,
+    });
     this.scene.add(this.lights.group);
 
     /** @type {FogSystem} */
     this.fog = new FogSystem(this.scene, {
-      color: 0x0a1523, density: 0.03, layers: 7, radius: 34, height: 8,
+      color: 0x0a1523, density: 0.03, layers: this.budget.hazeLayers,
+      radius: 34, height: 8,
     });
     this.fog.snap(0.03, 0);
 
     /** @type {DustField} */
     this.dust = new DustField({
       sprite: this.assets.get('sprite.dust'),
-      count: 4200,
+      count: this.budget.dustCount,
+      maxSize: this.budget.dustMaxSize,
       size: new Vector3(44, 13, 50),
       centre: new Vector3(0, 6.6, 0),
     });
@@ -158,7 +171,7 @@ export class SceneManager {
     /** @type {SparkBurst} */
     this.sparks = new SparkBurst({
       sprite: this.assets.get('sprite.spark'),
-      count: 360,
+      count: this.budget.isMobile ? 160 : 360,
       color: 0xffb45a,
     });
     this.scene.add(this.sparks.points);
@@ -233,8 +246,14 @@ export class SceneManager {
       ...CREW_UNIFORMS.inspector, height: 1.83, seed: 3, pose: 'idle', glasses: false,
     }).placeAt(-7.5, 0, -5.5, 0);
 
+    // On the tightest budget the third engineer is dropped. He walks through the
+    // background and is the one figure the story never refers to, so he is the
+    // honest thing to cut — roughly twenty-four draw calls per eye for a
+    // silhouette most viewers never look at directly.
     /** @type {Engineer[]} */
-    this.crew = [this.engineerA, this.engineerB, this.engineerC];
+    this.crew = this.budget.crewCount >= 3
+      ? [this.engineerA, this.engineerB, this.engineerC]
+      : [this.engineerA, this.engineerB];
     for (const engineer of this.crew) this.scene.add(engineer.group);
   }
 
@@ -258,8 +277,10 @@ export class SceneManager {
     const place = (id, data, slot, size = {}) => {
       const panel = new Panel({
         data,
-        width: size.width ?? 1.12,
-        height: size.height ?? 0.72,
+        width: size.width ?? 1.5,
+        height: size.height ?? 0.95,
+        resolution: this.budget.panelResolution,
+        repaintHz: this.budget.panelHz,
         typewriter: size.typewriter ?? false,
       });
       return this.holograms.place(id, panel, slot);
@@ -275,7 +296,7 @@ export class SceneManager {
         { label: 'Mean deviation', value: 0.9, target: 0.14, unit: ' mm', decimals: 2, bar: 0.6, barTarget: 0.08, state: 'ok' },
       ],
       footer: 'GT-7841 · rev 12',
-    }, { angle: 0, radius: 5.0, height: 0.92, tilt: 0 }, { width: 1.24, height: 0.76 });
+    }, { angle: 0, radius: 5.6, height: 4.85, tilt: 0 });
 
     place('life', {
       title: 'Remaining Life', badge: 'RUL', status: 'warn', kind: 'metrics',
@@ -285,7 +306,7 @@ export class SceneManager {
         { label: 'HP compressor', value: 9000, target: 7810, unit: ' cyc', bar: 0.95, barTarget: 0.83, state: 'ok' },
       ],
       footer: 'Prognostic model v9',
-    }, { angle: -44, radius: 5.4, height: 3.34 });
+    }, { angle: -87, radius: 4.0, height: 2.25 });
 
     place('telemetry', {
       title: 'Live Telemetry', badge: 'STREAM', status: 'warn', kind: 'graph',
@@ -295,26 +316,26 @@ export class SceneManager {
         { label: 'N1', value: 0, target: 0, unit: '%', state: 'idle' },
       ],
       footer: 'ACARS · 4 Hz',
-    }, { angle: -34, radius: 5.7, height: 2.30 }, { width: 1.26, height: 0.8 });
+    }, { angle: -63, radius: 3.7, height: 3.00 });
 
     place('health', {
       title: 'Engine Health', badge: 'INDEX', status: 'warn', kind: 'gauge',
       gauge: { value: 0.98, target: 0.62, label: 'Health Index', caption: 'Fan section degraded' },
       footer: 'Fleet percentile 12',
-    }, { angle: -23, radius: 5.9, height: 3.40 }, { width: 1.08, height: 0.82 });
+    }, { angle: -34, radius: 3.7, height: 3.00 });
 
     place('confidence', {
       title: 'Confidence', badge: 'AI', status: 'ok', kind: 'gauge',
       gauge: { value: 0, target: 0.964, label: 'Diagnosis', caption: '3 independent models agree' },
       footer: 'Ensemble · 3 models',
-    }, { angle: 23, radius: 5.9, height: 3.40 }, { width: 1.08, height: 0.82 });
+    }, { angle: 34, radius: 3.7, height: 3.00 });
 
     place('recommendation', {
       title: 'Recommendation', badge: 'ACTION', status: 'ok', kind: 'text',
       text: 'Replace fan blade 07 and its dynamic balance pair. Estimated 6 hours. '
           + 'Aircraft returns to service before the 14:20 rotation.',
       footer: 'Approved by AeroMind',
-    }, { angle: 34, radius: 5.7, height: 2.30 }, { width: 1.26, height: 0.8, typewriter: true });
+    }, { angle: 34, radius: 3.7, height: 1.55 }, { typewriter: true });
 
     place('checklist', {
       title: 'Repair Checklist', badge: '0 / 5', status: 'warn', kind: 'checklist',
@@ -326,7 +347,7 @@ export class SceneManager {
         { label: 'Dynamic balance · verify vibration', done: false },
       ],
       footer: 'AMM 72-31-11',
-    }, { angle: 44, radius: 5.4, height: 3.34 }, { width: 1.2, height: 0.82 });
+    }, { angle: 63, radius: 3.7, height: 3.00 });
 
     /* ---------------------------------------------------- lower row (4) */
 
@@ -340,7 +361,7 @@ export class SceneManager {
         { label: 'A-3415  ·  in service', display: 'NOMINAL', state: 'ok' },
       ],
       footer: '48 aircraft monitored',
-    }, { angle: -47, radius: 5.2, height: 1.22 });
+    }, { angle: -63, radius: 3.7, height: 1.55 });
 
     place('history', {
       title: 'Maintenance History', badge: 'GT-7841', status: 'ok', kind: 'stack',
@@ -351,14 +372,14 @@ export class SceneManager {
         { label: '2024-12-18  ·  overhaul', display: 'PASS', state: 'ok' },
       ],
       footer: '11 240 cycles total',
-    }, { angle: -29, radius: 5.8, height: 1.10 });
+    }, { angle: -34, radius: 3.7, height: 1.55 });
 
     place('amm', {
       title: 'AMM Reference', badge: '72-31-11', status: 'ok', kind: 'text',
       text: 'Fan blade removal and installation. Blades must be replaced as a '
           + 'moment-weight pair. Torque blade root retainer to 84 Nm.',
       footer: 'Revision 2026-04',
-    }, { angle: 29, radius: 5.8, height: 1.10 }, { typewriter: true });
+    }, { angle: 63, radius: 3.7, height: 1.55 }, { typewriter: true });
 
     place('inventory', {
       title: 'Parts Inventory', badge: 'STOCK', status: 'ok', kind: 'stack',
@@ -369,7 +390,7 @@ export class SceneManager {
         { label: 'Delivery to bay 04', display: '9 MIN', state: 'ok' },
       ],
       footer: 'Store 2 · aisle D',
-    }, { angle: 47, radius: 5.2, height: 1.22 });
+    }, { angle: 87, radius: 4.0, height: 2.25 });
   }
 
   /**
@@ -392,7 +413,12 @@ export class SceneManager {
      * @returns {Panel}
      */
     const board = (data, position, width, height, options = {}) => {
-      const panel = new Panel({ data, width, height, ...options });
+      const panel = new Panel({
+        data, width, height,
+        resolution: this.budget.panelResolution,
+        repaintHz: this.budget.panelHz,
+        ...options,
+      });
       panel.setPosition(...position);
       panel.faceTowards(new Vector3(0, 1.9, 12));
       this.scene.add(panel.group);
@@ -409,7 +435,7 @@ export class SceneManager {
         { label: 'Passengers affected', display: '1 140', state: 'fault', bar: 0, barTarget: 0.9 },
       ],
       footer: 'Reactive maintenance',
-    }, [-2.35, 3.3, 5.0], 2.0, 1.18);
+    }, [-1.95, 3.30, 5.0], 2.15, 1.30);
 
     /** @type {Panel} */
     this.impactWith = board({
@@ -420,7 +446,7 @@ export class SceneManager {
         { label: 'Passengers affected', display: '0', state: 'ok', bar: 0, barTarget: 0.02 },
       ],
       footer: 'Predictive maintenance',
-    }, [2.35, 3.3, 5.0], 2.0, 1.18);
+    }, [1.95, 3.30, 5.0], 2.15, 1.30);
 
     /** @type {Panel} */
     this.impactMetrics = board({
@@ -434,7 +460,7 @@ export class SceneManager {
         { label: 'Fleet availability', display: '↑  IMPROVED', state: 'ok' },
       ],
       footer: 'Modelled across 48 aircraft',
-    }, [0, 1.62, 5.0], 4.6, 1.5);
+    }, [0, 1.48, 5.0], 4.0, 1.62);
 
     for (const panel of this.impactPanels) panel.group.visible = false;
   }
@@ -458,8 +484,8 @@ export class SceneManager {
       eyebrow: 'Business Impact',
       title: 'Six Hours, Not Eighteen',
       subtitle: 'One prediction, made before the failure',
-      width: 5.8, aspect: 3.0,
-    }).place(0, 4.62, 5.0, new Vector3(0, 1.9, 12));
+      width: 5.4, aspect: 3.0,
+    }).place(0, 4.72, 5.0, new Vector3(0, 1.9, 12));
 
     /** @type {TitleCard} */
     this.cardClose = new TitleCard({
@@ -1004,7 +1030,7 @@ export class SceneManager {
       },
       onUpdate: (t, p) => {
         this.fade = 1;
-        this.rig.moveTo(0, lerp(1.72, 1.95, Ease.inOutCubic(p)), lerp(6.6, 11.8, Ease.inOutCubic(p)));
+        this.rig.moveTo(0, lerp(1.72, 1.95, Ease.inOutCubic(p)), lerp(6.6, 9.7, Ease.inOutCubic(p)));
         this.rig.faceTo(0);
 
         if (t > 0.3) this.cardImpact.show(1); else this.cardImpact.hide();
@@ -1052,7 +1078,7 @@ export class SceneManager {
         this.hud.setOpacity(1 - progress(t, 0, 1.6));
         this.fade = 1 - progress(t, 6.4, 7.9, Ease.inOutCubic);
 
-        this.rig.moveTo(0, 1.72, lerp(11.6, 13.4, Ease.inOutCubic(p)));
+        this.rig.moveTo(0, 1.72, lerp(9.7, 11.4, Ease.inOutCubic(p)));
 
         if (t > 0.8 && t < 4.4) this.cardClose.show(1); else this.cardClose.hide();
         if (t > 4.0 && t < 7.6) this.cardFinal.show(1); else this.cardFinal.hide();

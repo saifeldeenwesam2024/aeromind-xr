@@ -72,6 +72,9 @@ export class Panel {
    * @param {number} [options.width] Panel width in metres.
    * @param {number} [options.height] Panel height in metres.
    * @param {number} [options.resolution] Texture pixels per metre.
+   * @param {number} [options.repaintHz] Canvas repaint rate. Values ease every
+   *   frame regardless; only the texture upload is throttled, which is the part
+   *   that costs real time on a mobile GPU.
    * @param {number|string} [options.tint] Glass tint.
    * @param {number|string} [options.border] Border colour.
    * @param {boolean} [options.typewriter] Reveal body copy character by character.
@@ -79,9 +82,10 @@ export class Panel {
   constructor(options) {
     const {
       data,
-      width = 1.05,
-      height = 0.66,
-      resolution = 620,
+      width = 1.5,
+      height = 0.95,
+      resolution = 560,
+      repaintHz = 12,
       tint = 0x08192e,
       border = 0x6fd2ff,
       typewriter = false,
@@ -95,6 +99,8 @@ export class Panel {
     this.height = height;
     /** @type {boolean} */
     this.typewriter = typewriter;
+    /** @type {number} Minimum seconds between canvas repaints. */
+    this.repaintInterval = 1 / Math.max(1, repaintHz);
 
     const pxW = Math.round(width * resolution);
     const pxH = Math.round(height * resolution);
@@ -113,7 +119,7 @@ export class Panel {
       tint,
       border,
       aspect: width / height,
-      radius: 0.05,
+      radius: 0.055,
     });
 
     /** @type {Group} Scene graph node. Position and orient this. */
@@ -295,7 +301,7 @@ export class Panel {
     }
 
     this._repaintTimer += dt;
-    if ((this._dirty || animating) && this._repaintTimer > 1 / 12) {
+    if ((this._dirty || animating) && this._repaintTimer > this.repaintInterval) {
       this._repaintTimer = 0;
       this._dirty = false;
       this.#paint(time);
@@ -347,7 +353,7 @@ export class Panel {
    * @private
    */
   #paintHeader(ctx, W, H, pad, time) {
-    const titleSize = Math.round(H * 0.082);
+    const titleSize = Math.round(H * 0.102);
     const y = pad + titleSize * 0.85;
 
     // Status dot.
@@ -373,7 +379,7 @@ export class Panel {
     trackedText(ctx, this.data.title ?? '', pad + titleSize * 0.62, y, titleSize * 0.035, 'left');
 
     if (this.data.badge) {
-      const badgeSize = Math.round(H * 0.048);
+      const badgeSize = Math.round(H * 0.056);
       ctx.font = `500 ${badgeSize}px ${MONO_FONT}`;
       let w = 0;
       for (const c of this.data.badge) w += ctx.measureText(c).width + badgeSize * 0.1;
@@ -422,8 +428,8 @@ export class Panel {
     if (!rows.length) return;
 
     const rowH = Math.min(h / rows.length, this.canvas.height * 0.15);
-    const labelSize = Math.round(rowH * 0.32);
-    const valueSize = Math.round(rowH * 0.4);
+    const labelSize = Math.round(rowH * 0.36);
+    const valueSize = Math.round(rowH * 0.48);
 
     rows.forEach((row, i) => {
       const ry = y + i * rowH;
@@ -477,7 +483,7 @@ export class Panel {
   #paintStack(ctx, x, y, w, h) {
     const rows = this.data.rows ?? [];
     const rowH = Math.min(h / Math.max(rows.length, 1), this.canvas.height * 0.11);
-    const size = Math.round(rowH * 0.42);
+    const size = Math.round(rowH * 0.48);
 
     rows.forEach((row, i) => {
       const ry = y + i * rowH + size;
@@ -591,7 +597,7 @@ export class Panel {
     // Read-out below the plot.
     const rows = this.data.rows ?? [];
     if (rows.length) {
-      const size = Math.round(h * 0.11);
+      const size = Math.round(h * 0.13);
       const colW = w / rows.length;
       rows.forEach((row, i) => {
         const cx = x + colW * i;
@@ -626,7 +632,7 @@ export class Panel {
     if (!items.length) return;
 
     const rowH = Math.min(h / items.length, this.canvas.height * 0.13);
-    const size = Math.round(rowH * 0.36);
+    const size = Math.round(rowH * 0.42);
     const box = rowH * 0.42;
 
     items.forEach((item, i) => {
@@ -763,7 +769,7 @@ export class Panel {
    * @private
    */
   #paintText(ctx, x, y, w, h) {
-    const size = Math.round(h * 0.115);
+    const size = Math.round(h * 0.142);
     ctx.font = `400 ${size}px ${UI_FONT}`;
 
     let text = this.data.text ?? '';

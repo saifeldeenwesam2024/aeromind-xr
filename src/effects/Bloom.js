@@ -39,6 +39,7 @@ export class PostChain {
    * @param {number} [options.radius] Bloom radius.
    * @param {number} [options.threshold] Bloom luminance threshold.
    * @param {number} [options.bloomScale] Bloom buffer scale (0–1); lower is faster.
+   * @param {number} [options.samples] Multisample count for the scene buffer.
    * @param {boolean} [options.grade] Append the cinematic grade pass.
    * @param {boolean} [options.renderToScreen] Present directly instead of to a target.
    */
@@ -50,6 +51,7 @@ export class PostChain {
       radius = 0.72,
       threshold = 0.82,
       bloomScale = 0.5,
+      samples = 4,
       grade = true,
       renderToScreen = false,
     } = options;
@@ -76,7 +78,7 @@ export class PostChain {
       type: HalfFloatType,
       depthBuffer: true,
       stencilBuffer: false,
-      samples: renderer.capabilities.isWebGL2 ? 4 : 0,
+      samples: renderer.capabilities.isWebGL2 ? samples : 0,
     });
     target.texture.name = 'PostChain.target';
 

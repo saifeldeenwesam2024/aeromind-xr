@@ -37,11 +37,15 @@ export class LightRig {
    * @param {object} [options] Configuration.
    * @param {Vector3} [options.focus] World point the key light aims at.
    * @param {number} [options.shaftCount] Number of volumetric ceiling shafts.
+   * @param {boolean} [options.shadows] Whether the key light casts shadows.
+   * @param {number} [options.shadowMapSize] Shadow map resolution.
    */
   constructor(options = {}) {
     const {
       focus = new Vector3(0, 2.6, 0),
       shaftCount = 6,
+      shadows = true,
+      shadowMapSize = 1024,
     } = options;
 
     /** @type {Group} Scene graph node holding every light. */
@@ -67,8 +71,8 @@ export class LightRig {
     this.key = new SpotLight(0xbfe0ff, 26, 42, Math.PI / 7, 0.45, 1.5);
     this.key.position.set(-7.5, 11.5, 8.5);
     this.key.target.position.copy(this.focus);
-    this.key.castShadow = true;
-    this.key.shadow.mapSize.set(1024, 1024);
+    this.key.castShadow = shadows;
+    this.key.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     this.key.shadow.camera.near = 2;
     this.key.shadow.camera.far = 34;
     this.key.shadow.bias = -0.0016;
