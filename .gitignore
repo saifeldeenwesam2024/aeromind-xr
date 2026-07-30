@@ -1,0 +1,15 @@
+# Build-time only. The deployed application uses vendor/, never node_modules/.
+node_modules/
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Local logs and scratch
+*.log
+npm-debug.log*
+.cache/

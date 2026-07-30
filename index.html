@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>AeroMind XR — AI Operating System for Aircraft Maintenance</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="description" content="AeroMind XR — an immersive mixed-reality demonstration of predictive aircraft maintenance." />
+<meta name="theme-color" content="#04070d" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="stylesheet" href="./styles/main.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%234FC3FF' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%234FC3FF'/%3E%3C/svg%3E" />
+
+<!--
+  Offline import map. Every dependency is vendored under ./vendor/three/
+  so the experience runs with no network connection whatsoever.
+-->
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+
+<!-- The single WebGL surface. The world exists once and is rendered twice. -->
+<canvas id="viewport"></canvas>
+
+<!-- ==================== LOADING SCREEN ==================== -->
+<div id="loading-screen" class="overlay" data-visible="true">
+  <div class="loader-inner">
+    <div class="brandmark">
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="ring ring-outer" cx="60" cy="60" r="52" />
+        <circle class="ring ring-mid" cx="60" cy="60" r="38" />
+        <circle class="ring ring-inner" cx="60" cy="60" r="24" />
+        <circle class="core" cx="60" cy="60" r="7" />
+      </svg>
+    </div>
+    <h1 class="brand-title">AeroMind</h1>
+    <p class="brand-sub">AI Operating System for Aircraft Maintenance</p>
+    <div class="progress-track"><div class="progress-fill" id="loading-bar"></div></div>
+    <p class="loader-status" id="loading-status">Initialising systems</p>
+  </div>
+</div>
+
+<!-- ==================== START MENU ==================== -->
+<div id="start-menu" class="overlay" data-visible="false">
+  <div class="menu-inner">
+    <div class="menu-eyebrow">Immersive Demonstration</div>
+    <h1 class="menu-title">AeroMind<span class="menu-title-xr">XR</span></h1>
+    <p class="menu-tagline">Step inside the hangar. Predict. Assist. Prevent.</p>
+
+    <div class="menu-actions" id="menu-actions">
+      <button class="btn btn-primary" id="btn-vr" type="button">
+        <span class="btn-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 8h18a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-5.2a2 2 0 0 1-1.6-.8l-1.2-1.6a1.2 1.2 0 0 0-2 0l-1.2 1.6a2 2 0 0 1-1.6.8H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/></svg>
+        </span>
+        <span class="btn-label">
+          <strong id="btn-vr-title">Enter VR</strong>
+          <em id="btn-vr-sub">Google Cardboard — stereoscopic</em>
+        </span>
+      </button>
+
+      <button class="btn btn-secondary" id="btn-desktop" type="button">
+        <span class="btn-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 4h18v12H3z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 20h8" stroke="currentColor" stroke-width="1.8"/></svg>
+        </span>
+        <span class="btn-label">
+          <strong>Preview</strong>
+          <em id="btn-desktop-sub">Mouse &amp; keyboard — flat screen</em>
+        </span>
+      </button>
+    </div>
+
+    <div class="menu-hints">
+      <div class="hint"><kbd>Drag</kbd> Look around</div>
+      <div class="hint"><kbd>I</kbd> Inspect mode</div>
+      <div class="hint"><kbd>Space</kbd> Play / pause</div>
+      <div class="hint"><kbd>R</kbd> Recentre</div>
+      <div class="hint"><kbd>←</kbd><kbd>→</kbd> Skip chapter</div>
+    </div>
+
+    <p class="menu-note" id="menu-note">For the best experience, use headphones and a Cardboard viewer in landscape.</p>
+  </div>
+</div>
+
+<!-- ==================== IN-EXPERIENCE CONTROL BAR (desktop preview only) ==================== -->
+<div id="control-bar" class="control-bar" data-visible="false">
+  <button class="cb-btn" id="cb-play" type="button" title="Play / pause (Space)">
+    <svg class="ico-pause" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+    <svg class="ico-play" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>
+  </button>
+  <div class="cb-scrub" id="cb-scrub" role="slider" aria-label="Timeline" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+    <div class="cb-scrub-fill" id="cb-scrub-fill"></div>
+    <div class="cb-markers" id="cb-markers"></div>
+  </div>
+  <div class="cb-chapter" id="cb-chapter">01 — Title</div>
+  <button class="cb-btn cb-text" id="cb-vr" type="button" title="Switch to stereoscopic VR">VR</button>
+</div>
+
+<!-- ==================== ORIENTATION PROMPT ==================== -->
+<div id="rotate-prompt" class="overlay rotate-prompt" data-visible="false">
+  <div class="rotate-inner">
+    <svg viewBox="0 0 64 64" class="rotate-ico" aria-hidden="true">
+      <rect x="20" y="6" width="24" height="42" rx="4" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <path d="M14 52a26 26 0 0 0 36 0" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M50 46v7h-7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <p>Rotate your device to landscape</p>
+  </div>
+</div>
+
+<!-- ==================== FATAL ERROR ==================== -->
+<div id="fatal" class="overlay fatal" data-visible="false">
+  <div class="fatal-inner">
+    <h2>Unable to start AeroMind XR</h2>
+    <p id="fatal-msg"></p>
+  </div>
+</div>
+
+<noscript>
+  <div class="overlay" data-visible="true" style="z-index:999">
+    <div class="menu-inner"><h1 class="menu-title">AeroMind XR</h1>
+    <p class="menu-tagline">JavaScript is required to run this immersive experience.</p></div>
+  </div>
+</noscript>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

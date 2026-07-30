@@ -1,0 +1,29 @@
+{
+  "name": "aeromind-xr",
+  "version": "1.0.0",
+  "description": "AeroMind XR — an immersive mixed-reality demonstration of AI-driven predictive aircraft maintenance. Runs entirely offline in a browser, with real stereoscopic rendering for Google Cardboard and WebXR.",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "keywords": [
+    "webxr",
+    "webgl",
+    "three.js",
+    "stereoscopic",
+    "google-cardboard",
+    "mixed-reality",
+    "aviation",
+    "predictive-maintenance",
+    "digital-twin"
+  ],
+  "scripts": {
+    "start": "python3 tools/serve.py 8137",
+    "serve": "python3 tools/serve.py 8137",
+    "vendor": "node tools/vendor.mjs",
+    "check": "esbuild src/main.js --bundle --format=esm --outfile=/dev/null --alias:three=./vendor/three/three.module.js --alias:three/addons=./vendor/three/addons --log-level=warning"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "three": "^0.169.0"
+  }
+}
