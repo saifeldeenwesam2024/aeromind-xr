@@ -272,6 +272,12 @@ Append `?tier=mobile` or `?tier=mobile-low` to the URL to force a tier. That is
 useful for previewing the mobile look from a desktop, and for pinning a
 struggling handset at a venue without rebuilding anything.
 
+`?assist=<degrees>` moves the narration strip relative to the eye line —
+positive is below, negative above, and the default is 0 (on the lens axis, over
+the fan). Where that strip feels comfortable depends on how the handset sits in
+its holder and on the wearer, and tuning it by eye needs a viewer on a head, so
+it is adjustable on the device rather than only in the source.
+
 Measured in the busiest chapter, with all eleven analysis panels present:
 
 | Mode | Draw calls | Triangles |

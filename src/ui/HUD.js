@@ -101,6 +101,23 @@ export class HUD {
   }
 
   /**
+   * Reads the narration angle override from the URL.
+   *
+   * Tuning this by eye needs a viewer on a head, and the round trip through a
+   * commit, a deploy and a phone cache is far too slow for that. Exposing it as
+   * a query parameter lets it be dialled in seconds, on the device, by whoever
+   * is actually wearing the thing.
+   *
+   * @returns {number} Degrees below the eye line; negative is above.
+   * @private
+   */
+  static #readAngleOverride() {
+    const raw = new URLSearchParams(location.search).get('assist');
+    const value = Number.parseFloat(raw ?? '');
+    return Number.isFinite(value) ? clamp(value, -20, 25) : 0;
+  }
+
+  /**
    * Parents the HUD to a camera rig.
    * @param {import('../engine/CameraRig.js').CameraRig} rig Camera rig.
    */
@@ -356,7 +373,7 @@ export class HUD {
    * @private
    */
   #createNarration() {
-    const surface = createCanvas(1400, 300);
+    const surface = createCanvas(1400, 312);
     /** @type {HTMLCanvasElement} */
     this.narrationCanvas = surface.canvas;
     /** @type {CanvasRenderingContext2D} */
@@ -367,20 +384,29 @@ export class HUD {
     this.narrationMaterial = this.#track(this.#createOverlayMaterial(this.narrationTexture, 1.0, true));
 
     /** @type {Mesh} */
-    // Placed 3° below the eye line — up on the fan disc.
+    // Sits on the lens axis by default — dead centre, over the fan blades.
     //
-    // This strip is the only thing in the experience that *speaks*, so it sits
-    // where the viewer is already looking. It began at 13°, which reads fine on
-    // a flat screen and fails in a viewer: a Cardboard lens vignettes and smears
-    // toward the edge of its circle, and 13° down put the text on that rim,
-    // reported from a handset as unreadable.
+    // This strip is the only thing in the experience that *speaks*, so it goes
+    // where the viewer is already looking. It began 13° below the eye line,
+    // which reads fine on a flat screen and fails in a viewer: a Cardboard lens
+    // vignettes and smears toward the edge of its circle, and 13° down put the
+    // text on that rim, reported from a handset as unreadable.
     //
-    // At 3° the strip straddles the lens axis, overlapping the lower fan blades.
-    // That is deliberate — this is the sharpest part of the optics, and the
-    // plate is dark and translucent so the engine still reads through it. The
-    // fault marker sits about 7° higher, so nothing the story needs is covered.
-    this.narrationBar = new Mesh(new PlaneGeometry(1.36, 0.291), this.narrationMaterial);
-    this.narrationBar.position.set(0, -0.0734, -HUD_DISTANCE);
+    // On the axis it overlaps the lower fan. That is deliberate: this is the
+    // sharpest part of the optics, the plate is dark and translucent so the
+    // engine reads through it, and the fault marker sits about 7° higher, so
+    // nothing the story needs to show is covered.
+    //
+    // Comfort in a viewer is personal and depends on how the handset sits in the
+    // holder, so the angle is tunable from the URL without a rebuild:
+    // `?assist=4` puts it 4° below the eye line, `?assist=-3` puts it 3° above.
+    const assistDeg = HUD.#readAngleOverride();
+    this.narrationBar = new Mesh(new PlaneGeometry(1.42, 0.304), this.narrationMaterial);
+    this.narrationBar.position.set(
+      0,
+      -HUD_DISTANCE * Math.tan((assistDeg * Math.PI) / 180),
+      -HUD_DISTANCE,
+    );
     this.narrationBar.renderOrder = 43;
     this.group.add(this.narrationBar);
 
@@ -477,8 +503,8 @@ export class HUD {
     // canvas, so a one-line message gets a compact strip instead of a half-empty
     // box — and because the block stays centred, the strip's position on the
     // lens does not shift as the line count changes.
-    const lineHeight = 66;
-    ctx.font = `500 58px ${UI_FONT}`;
+    const lineHeight = 74;
+    ctx.font = `600 66px ${UI_FONT}`;
     const shown = this.narrationText.slice(0, Math.floor(this._narrationChars));
     const lines = wrapText(ctx, shown, W - 150).slice(-2);
 
@@ -488,10 +514,10 @@ export class HUD {
     // Dark plate. Subtitles have to survive being read against a white-hot
     // engine, so the strip carries its own background rather than relying on
     // whatever happens to be behind it.
-    ctx.fillStyle = 'rgba(5, 12, 22, 0.74)';
+    ctx.fillStyle = 'rgba(4, 10, 20, 0.84)';
     roundRect(ctx, 34, plateTop, W - 68, plateH, 28);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(122,217,255,0.26)';
+    ctx.strokeStyle = 'rgba(122,217,255,0.34)';
     ctx.lineWidth = 2;
     ctx.stroke();
 
@@ -512,10 +538,10 @@ export class HUD {
     trackedText(ctx, this.narrationSpeaker, W / 2, plateTop + 44, 4, 'center');
 
     // Body copy, revealed progressively.
-    ctx.font = `500 58px ${UI_FONT}`;
-    ctx.fillStyle = 'rgba(232,244,255,0.98)';
+    ctx.font = `600 66px ${UI_FONT}`;
+    ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
-    const firstBaseline = plateTop + 44 + 52;
+    const firstBaseline = plateTop + 44 + 58;
     lines.forEach((line, i) => {
       ctx.fillText(line, W / 2, firstBaseline + i * lineHeight);
     });
