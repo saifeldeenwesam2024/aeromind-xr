@@ -237,8 +237,14 @@ export class DigitalTwin {
 
     /** @type {Mesh} */
     this.readout = new Mesh(new PlaneGeometry(1.6, 0.6), this.readoutMaterial);
-    // Forward of the inlet lip and below the axis, so the stand never masks it.
-    this.readout.position.set(0, -1.75, 3.5);
+    // Forward of the inlet lip and well below the axis.
+    //
+    // The height is set by what is *above* it: the head-locked narration strip
+    // occupies roughly 4–13° below the eye line whichever way the viewer turns,
+    // so this read-out has to clear that band or the two print on top of each
+    // other. From the chapter-four camera it lands around 21° down, leaving a
+    // comfortable gap.
+    this.readout.position.set(0, -2.35, 4.0);
     this.readout.renderOrder = 15;
     this.group.add(this.readout);
 

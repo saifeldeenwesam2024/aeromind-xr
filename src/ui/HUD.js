@@ -355,8 +355,16 @@ export class HUD {
     this.narrationMaterial = this.#track(this.#createOverlayMaterial(this.narrationTexture, 1.0, true));
 
     /** @type {Mesh} */
-    this.narrationBar = new Mesh(new PlaneGeometry(1.24, 0.195), this.narrationMaterial);
-    this.narrationBar.position.set(0, -0.325, -HUD_DISTANCE);
+    // Placed 8.5° below the eye line rather than 13°.
+    //
+    // This strip is the only thing in the experience that *speaks*, so it has to
+    // sit where the viewer is already looking. A Cardboard lens vignettes and
+    // smears badly toward the edge of its circle, and 13° down put the text into
+    // exactly that region — legible on a flat screen, hard to read in a viewer.
+    // Just under 9° keeps it in the clear centre of the lens while still leaving
+    // the engine itself unobstructed.
+    this.narrationBar = new Mesh(new PlaneGeometry(1.30, 0.205), this.narrationMaterial);
+    this.narrationBar.position.set(0, -0.209, -HUD_DISTANCE);
     this.narrationBar.renderOrder = 43;
     this.group.add(this.narrationBar);
 
