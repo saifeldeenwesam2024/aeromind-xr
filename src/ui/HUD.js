@@ -58,8 +58,16 @@ export class HUD {
 
     /** @type {Quaternion} Lagging orientation. */
     this.smoothed = new Quaternion();
-    /** @type {number} Orientation convergence rate. */
-    this.lagLambda = 11;
+    /**
+     * Orientation convergence rate.
+     *
+     * High enough that the interface follows a head turn closely — a strip the
+     * viewer is trying to read must not swim away from them — but not so high
+     * that the spring disappears entirely and the interface feels glued to the
+     * eyes.
+     * @type {number}
+     */
+    this.lagLambda = 17;
 
     /** @type {number} Master opacity, 0–1. */
     this.opacity = 0;
@@ -355,16 +363,20 @@ export class HUD {
     this.narrationMaterial = this.#track(this.#createOverlayMaterial(this.narrationTexture, 1.0, true));
 
     /** @type {Mesh} */
-    // Placed 8.5° below the eye line rather than 13°.
+    // Placed 6° below the eye line.
     //
     // This strip is the only thing in the experience that *speaks*, so it has to
-    // sit where the viewer is already looking. A Cardboard lens vignettes and
-    // smears badly toward the edge of its circle, and 13° down put the text into
-    // exactly that region — legible on a flat screen, hard to read in a viewer.
-    // Just under 9° keeps it in the clear centre of the lens while still leaving
-    // the engine itself unobstructed.
-    this.narrationBar = new Mesh(new PlaneGeometry(1.30, 0.205), this.narrationMaterial);
-    this.narrationBar.position.set(0, -0.209, -HUD_DISTANCE);
+    // sit where the viewer is already looking. It began at 13°, which is fine on
+    // a flat screen and wrong in a viewer: a Cardboard lens vignettes and smears
+    // toward the edge of its circle, and 13° down lands the text in exactly that
+    // region — reported from a handset as unreadable, sitting on the bottom rim.
+    //
+    // 6° puts it just under the centre of the lens, where the optics are
+    // sharpest. That is close enough to the axis that the viewer reads it
+    // without moving their head at all, and still low enough to leave the engine
+    // clear above it.
+    this.narrationBar = new Mesh(new PlaneGeometry(1.36, 0.215), this.narrationMaterial);
+    this.narrationBar.position.set(0, -0.147, -HUD_DISTANCE);
     this.narrationBar.renderOrder = 43;
     this.group.add(this.narrationBar);
 
