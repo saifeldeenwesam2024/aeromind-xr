@@ -77,6 +77,10 @@ export class HUD {
     this.boot = 0;
     /** @type {number} Boot progress the HUD eases toward. */
     this.targetBoot = 0;
+    /** @type {number} Reticle presence, 0–1. */
+    this.reticle_ = 0;
+    /** @type {number} Reticle presence the HUD eases toward. */
+    this._reticleTarget = 0;
 
     /** @type {number} Internal clock. */
     this.time = 0;
@@ -352,7 +356,7 @@ export class HUD {
    * @private
    */
   #createNarration() {
-    const surface = createCanvas(1400, 220);
+    const surface = createCanvas(1400, 300);
     /** @type {HTMLCanvasElement} */
     this.narrationCanvas = surface.canvas;
     /** @type {CanvasRenderingContext2D} */
@@ -363,20 +367,20 @@ export class HUD {
     this.narrationMaterial = this.#track(this.#createOverlayMaterial(this.narrationTexture, 1.0, true));
 
     /** @type {Mesh} */
-    // Placed 6° below the eye line.
+    // Placed 3° below the eye line — up on the fan disc.
     //
-    // This strip is the only thing in the experience that *speaks*, so it has to
-    // sit where the viewer is already looking. It began at 13°, which is fine on
-    // a flat screen and wrong in a viewer: a Cardboard lens vignettes and smears
-    // toward the edge of its circle, and 13° down lands the text in exactly that
-    // region — reported from a handset as unreadable, sitting on the bottom rim.
+    // This strip is the only thing in the experience that *speaks*, so it sits
+    // where the viewer is already looking. It began at 13°, which reads fine on
+    // a flat screen and fails in a viewer: a Cardboard lens vignettes and smears
+    // toward the edge of its circle, and 13° down put the text on that rim,
+    // reported from a handset as unreadable.
     //
-    // 6° puts it just under the centre of the lens, where the optics are
-    // sharpest. That is close enough to the axis that the viewer reads it
-    // without moving their head at all, and still low enough to leave the engine
-    // clear above it.
-    this.narrationBar = new Mesh(new PlaneGeometry(1.36, 0.215), this.narrationMaterial);
-    this.narrationBar.position.set(0, -0.147, -HUD_DISTANCE);
+    // At 3° the strip straddles the lens axis, overlapping the lower fan blades.
+    // That is deliberate — this is the sharpest part of the optics, and the
+    // plate is dark and translucent so the engine still reads through it. The
+    // fault marker sits about 7° higher, so nothing the story needs is covered.
+    this.narrationBar = new Mesh(new PlaneGeometry(1.36, 0.291), this.narrationMaterial);
+    this.narrationBar.position.set(0, -0.0734, -HUD_DISTANCE);
     this.narrationBar.renderOrder = 43;
     this.group.add(this.narrationBar);
 
@@ -469,41 +473,51 @@ export class HUD {
       return;
     }
 
+    // Measure before drawing. The plate is sized to the copy rather than to the
+    // canvas, so a one-line message gets a compact strip instead of a half-empty
+    // box — and because the block stays centred, the strip's position on the
+    // lens does not shift as the line count changes.
+    const lineHeight = 66;
+    ctx.font = `500 58px ${UI_FONT}`;
+    const shown = this.narrationText.slice(0, Math.floor(this._narrationChars));
+    const lines = wrapText(ctx, shown, W - 150).slice(-2);
+
+    const plateH = 44 + lines.length * lineHeight + 34;
+    const plateTop = (H - plateH) / 2;
+
     // Dark plate. Subtitles have to survive being read against a white-hot
     // engine, so the strip carries its own background rather than relying on
     // whatever happens to be behind it.
-    ctx.fillStyle = 'rgba(5, 12, 22, 0.66)';
-    roundRect(ctx, 40, 62, W - 80, H - 74, 26);
+    ctx.fillStyle = 'rgba(5, 12, 22, 0.74)';
+    roundRect(ctx, 34, plateTop, W - 68, plateH, 28);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(122,217,255,0.22)';
+    ctx.strokeStyle = 'rgba(122,217,255,0.26)';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Speaker chip.
+    // Speaker chip, seated inside the plate's top edge.
     ctx.font = `600 30px ${MONO_FONT}`;
     let chipW = 0;
     for (const c of this.narrationSpeaker) chipW += ctx.measureText(c).width + 4;
     chipW += 34;
 
     ctx.strokeStyle = 'rgba(122,217,255,0.5)';
-    ctx.fillStyle = 'rgba(30,90,140,0.35)';
+    ctx.fillStyle = 'rgba(30,90,140,0.4)';
     ctx.lineWidth = 2;
-    roundRect(ctx, W / 2 - chipW / 2, 6, chipW, 46, 23);
+    roundRect(ctx, W / 2 - chipW / 2, plateTop + 11, chipW, 46, 23);
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = '#7ad9ff';
-    trackedText(ctx, this.narrationSpeaker, W / 2, 39, 4, 'center');
+    trackedText(ctx, this.narrationSpeaker, W / 2, plateTop + 44, 4, 'center');
 
     // Body copy, revealed progressively.
     ctx.font = `500 58px ${UI_FONT}`;
-    const shown = this.narrationText.slice(0, Math.floor(this._narrationChars));
-    const lines = wrapText(ctx, shown, W - 150);
-
-    ctx.fillStyle = 'rgba(226,240,252,0.97)';
+    ctx.fillStyle = 'rgba(232,244,255,0.98)';
     ctx.textAlign = 'center';
-    lines.slice(-2).forEach((line, i) => {
-      ctx.fillText(line, W / 2, 126 + i * 66);
+    const firstBaseline = plateTop + 44 + 52;
+    lines.forEach((line, i) => {
+      ctx.fillText(line, W / 2, firstBaseline + i * lineHeight);
     });
     ctx.textAlign = 'left';
 
@@ -638,6 +652,19 @@ export class HUD {
     this.reticleMaterial.uniforms.uActive.value = active ? 1 : 0;
   }
 
+  /**
+   * Shows or hides the gaze reticle.
+   *
+   * The reticle exists to aim at the in-headset menu and has no purpose while
+   * the story plays. Retiring it when there is nothing to aim at frees the
+   * centre of the lens for the narration strip, and follows the same principle
+   * as the rest of this interface: a control that is always on is just noise.
+   * @param {boolean} value Whether the reticle should be present.
+   */
+  setReticleVisible(value) {
+    this._reticleTarget = value ? 1 : 0;
+  }
+
   /* --------------------------------------------------------------- update */
 
   /**
@@ -664,8 +691,11 @@ export class HUD {
       if (material.uniforms?.uOpacity) material.uniforms.uOpacity.value = this.opacity;
       if (material.uniforms?.uBoot) material.uniforms.uBoot.value = this.boot;
     }
-    // The reticle is not part of the boot wipe; it appears with the frame.
-    this.reticleMaterial.uniforms.uOpacity.value = this.opacity * this.boot;
+    // The reticle is not part of the boot wipe; it appears with the frame, and
+    // only when there is something to aim at.
+    this.reticle_ = damp(this.reticle_, this._reticleTarget, 7, dt);
+    this.reticleMaterial.uniforms.uOpacity.value = this.opacity * this.boot * this.reticle_;
+    this.reticle.visible = this.reticle_ > 0.01;
 
     // Narration typewriter.
     if (this.narrationText && this._narrationChars < this.narrationText.length) {

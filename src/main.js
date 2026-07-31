@@ -435,9 +435,11 @@ class AeroMindApp {
     if (!interactives.length) {
       this.vrMenu.update(dt, { target: null, progress: 0 });
       this.hud.setGaze(0, false);
+      this.hud.setReticleVisible(false);
       this.input.resetGaze();
       return;
     }
+    this.hud.setReticleVisible(true);
 
     const ray = this.rig.getGazeRay();
     const hits = ray.intersectObjects(interactives, false);
